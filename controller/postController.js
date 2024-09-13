@@ -1,111 +1,138 @@
 const Post = require("../models/Post");
 const User = require("../models/User");
+const { client } = require("../config/elasticsearch");
 
+exports.newPost = async (req, res) => {
+    const userId = req.params.id;
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ error: "User Not Found." });
 
-exports.newPost = async (req, res) =>{
-    const id = req.params.id;
-    const user = await User.findById(id);
-    if(!user) return res.status(500).json("User Not Found .");
-
-    try{
+    try {
         const post = new Post({
             title: req.body.title,
             desc: req.body.desc,
             username: user.username,
             category: req.body.category,
             photo: req.body.photo
-        })
-        const newpost = await post.save();
-        return res.status(200).json(newpost);
-    }
-    catch(err)
-    {
-        return res.status(500).json(err);
-    }
-}
+        });
+        const newPost = await post.save();
 
-exports.deletePost = async (req, res) =>{
-    try
-    {
-        const postId = await Post.findById(req.params.id);
-        if(!postId) return res.status(404).json("Post not Found");
-        
-        await Post.findByIdAndDelete(req.params.id);
-        return res.status(200).json("Post Deleted");
-    }
-    catch(err)
-    {
-        return res.status(500).json(err);
-    }
-}
-
-exports.updatePost = async (req,res) =>{
-    // find the post forst :
-    const postId = req.params.id;
-    try
-    {
-        const post = await Post.findById(postId);
-        if(!post) return res.status(404).json("Post Not Found.");
-
-        if(post.username === req.body.username)
-        {
-            try
-            {
-                const newPost = await Post.findByIdAndUpdate(postId, req.body, {new: true});
-                return res.status(200).json(newPost);
+        // Index the new post in Elasticsearch
+        await client.index({
+            index: "posts",
+            id: newPost._id.toString(),
+            document: {
+                title: newPost.title,
+                desc: newPost.desc,
+                username: newPost.username,
+                category: newPost.category,
+                photo: newPost.photo,
             }
-            catch(err)
-            {
-                return res.status(500).json(err);
-            }
-        }
-        else
-        {
-            return res.status(401).json("You Can Update Only Your Post")
-        }
-    }
-    catch(err)
-    {
-        return res.status(500).json(err);
-    }
-}
+        });
 
-exports.getPost = async (req, res) =>{
+        return res.status(201).json(newPost);
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: "An error occurred while creating the post." });
+    }
+};
+
+exports.deletePost = async (req, res) => {
     const postId = req.params.id;
-    if(!postId) return res.status(404).json("Post Not Found.");
-    try
-    {
+
+    try {
         const post = await Post.findById(postId);
+        if (!post) return res.status(404).json({ error: "Post not Found" });
+
+        await Post.findByIdAndDelete(postId);
+        await client.delete({
+            index: "posts",
+            id: postId,
+        });
+
+        return res.status(200).json({ message: "Post Deleted" });
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: "An error occurred while deleting the post." });
+    }
+};
+
+exports.updatePost = async (req, res) => {
+    const postId = req.params.id;
+
+    try {
+        const post = await Post.findById(postId);
+        if (!post) return res.status(404).json({ error: "Post Not Found." });
+
+        if (post.username !== req.body.username) {
+            return res.status(401).json({ error: "You Can Update Only Your Post" });
+        }
+
+        const updatedPost = await Post.findByIdAndUpdate(postId, req.body, { new: true });
+
+        // Update the document in Elasticsearch
+        await client.update({
+            index: "posts",
+            id: updatedPost._id.toString(),
+            doc: {
+                title: updatedPost.title,
+                desc: updatedPost.desc,
+                username: updatedPost.username,
+                category: updatedPost.category,
+                photo: updatedPost.photo,
+            }
+        });
+
+        return res.status(200).json(updatedPost);
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: "An error occurred while updating the post." });
+    }
+};
+
+exports.getPost = async (req, res) => {
+    const postId = req.params.id;
+
+    try {
+        const post = await Post.findById(postId);
+        if (!post) return res.status(404).json({ error: "Post Not Found." });
         return res.status(200).json(post);
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: "An error occurred while retrieving the post." });
     }
-    catch(err)
-    {
-        return res.status(500).json(err);
-    }
-}
+};
 
-exports.getAllPosts = async(req, res) =>{
-    const username = req.query.username;
-    const catName = req.query.catName;
-    let posts;
-    try
-    {
-        if(username)
-        {
-            posts = await Post.find({username})
-        }
-        else if(catName)
-        {
-            posts = await Post.find({category: catName});
-        }
-        else
-        {
+exports.getAllPosts = async (req, res) => {
+    const { username, catName } = req.query;
+
+    try {
+        let posts;
+        if (username) {
+            posts = await Post.find({ username });
+        } else if (catName) {
+            posts = await Post.find({ category: catName });
+        } else {
             posts = await Post.find();
         }
         return res.status(200).json(posts);
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: "An error occurred while retrieving posts." });
     }
-    catch(err)
-    {
-        return res.status(500).json(err);
+};
+
+exports.getElasticPost = async (req, res) => {
+    const postId = req.params.id;
+
+    try {
+        const post = await client.get({
+            index: "posts",
+            id: postId,
+        });
+        return res.status(200).json(post._source);
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ error: "An error occurred while retrieving the post from Elasticsearch." });
     }
-}
+};

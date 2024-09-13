@@ -17,4 +17,7 @@ router.get("/:id", postController.getPost);
 //get all post:
 router.get("/", postController.getAllPosts);
 
+// get a single post from elastic search db: 
+router.get("/elastic/:id", postController.getElasticPost);
+
 exports.router = router;

@@ -4,12 +4,15 @@ const { connectDb } = require("./config/db.connection");
 const cors = require("cors");
 const multer = require("multer")
 const path = require("path");
-
+const port = process.env.PORT || 3000;
+const { client } = require("./config/elasticsearch");
 
 const authRoutes = require("./routes/auth")
 const userRoutes = require("./routes/user");
 const postRoutes = require("./routes/post");
 const catRoutes = require("./routes/category");
+const searchRoutes = require("./routes/search");
+
 dotenv.config();
 
 const server = express();
@@ -21,6 +24,7 @@ server.use(cors());
 server.use(authRoutes.router)
 server.use(userRoutes.router);
 server.use(catRoutes.router);
+server.use(searchRoutes.router);
 server.use(postRoutes.router);
 
 
@@ -48,6 +52,6 @@ server.post("/api/upload", upload.single("file"),(req,res)=>{
 
 
   
-server.listen(3000, () => {
-    console.log("Server is Running...");
+server.listen(port, () => {
+    console.log(`Server is Running...on ${port}`);
 });

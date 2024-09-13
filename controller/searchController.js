@@ -13,6 +13,7 @@ exports.search = async(req, res) =>{
                     multi_match: {
                         query: q,
                         fields: ["title", "desc", "username", "category"],
+                        fuzziness: "AUTO",
                     }
                 }
             }

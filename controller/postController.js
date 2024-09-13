@@ -1,6 +1,6 @@
 const Post = require("../models/Post");
 const User = require("../models/User");
-const { client } = require("../config/elasticsearch");
+const client  = require("../config/elasticsearch");
 
 exports.newPost = async (req, res) => {
     const userId = req.params.id;
